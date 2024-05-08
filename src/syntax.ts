@@ -58,6 +58,9 @@ export function closeBrackets(
  * @returns The trimmed completion.
  */
 export function trimCompletion(completion: string): string {
+  if (completion.endsWith("\n")) {
+    completion = completion.slice(0, -1);
+  }
   let endOfLastLine = completion.includes("\n")
     ? completion.lastIndexOf("\n")
     : 0;

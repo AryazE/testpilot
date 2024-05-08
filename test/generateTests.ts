@@ -6,7 +6,7 @@ import { MockCompletionModel } from "../src/mockModel";
 import {
   defaultPromptOptions,
   Prompt,
-  RetryPrompt,
+  RetryPromptFailedTest,
 } from "../src/promptCrafting";
 import { ITestInfo, TestOutcome } from "../src/report";
 import {
@@ -66,7 +66,9 @@ describe("TestGenerator", () => {
       Map.prototype.get.bind(snippetMap),
       model,
       validator,
-      collector
+      collector,
+      [],
+      []
     );
 
     const expectedPromptInfos: IPromptInfo[] = [];
@@ -147,7 +149,7 @@ describe("TestGenerator", () => {
       testId: 1,
       refiner: "RetryWithError",
     };
-    const refinedPrompt = new RetryPrompt(
+    const refinedPrompt = new RetryPromptFailedTest(
       initialPrompt,
       cmp2,
       "test failed"
@@ -194,7 +196,7 @@ describe("TestGenerator", () => {
       testId: 1,
       refiner: "RetryWithError",
     };
-    const refinedPrompt2 = new RetryPrompt(
+    const refinedPrompt2 = new RetryPromptFailedTest(
       refinedPrompt,
       cmp2,
       "test failed"
@@ -320,7 +322,7 @@ describe("TestGenerator", () => {
       testId: 0,
       refiner: "RetryWithError",
     };
-    const retryPrompt = new RetryPrompt(
+    const retryPrompt = new RetryPromptFailedTest(
       initialPrompt,
       invalidCmp,
       "Invalid syntax"
@@ -358,7 +360,9 @@ describe("Test validation", () => {
       Map.prototype.get.bind(snippetMap),
       model,
       validator,
-      collector
+      collector,
+      [],
+      []
     );
     const fun = APIFunction.fromSignature("string-utils.titleCase(string)");
     const prompt = new Prompt(fun, [], defaultPromptOptions());

@@ -5,6 +5,7 @@ import { ICompletionModel } from "./completionModel";
 import { trimCompletion } from "./syntax";
 
 const defaultPostOptions = {
+  model: "gpt-3.5-turbo-0125", // model to use
   max_tokens: 100, // maximum number of tokens to return
   temperature: 0, // sampling temperature; higher values increase diversity
   n: 5, // number of completions to return
@@ -77,10 +78,20 @@ export class Codex implements ICompletionModel {
           },
         }
       : {
-          prompt,
+          messages: [
+            {
+                "role": "system",
+                "content": "You are a professional JavaScript developer. Complete the test such that it passes."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+          ],
           ...options,
         };
 
+    await new Promise((resolve) => setTimeout(resolve, 200));
     const res = await axios.post(this.apiEndpoint, postOptions, { headers });
 
     performance.measure(
@@ -111,7 +122,7 @@ export class Codex implements ICompletionModel {
         if (choice.finish_reason === "content_filter") {
           numContentFiltered++;
         }
-        completions.add(choice.text);
+        completions.add(choice.message.content);
       }
     }
     if (numContentFiltered > 0) {
@@ -131,17 +142,50 @@ export class Codex implements ICompletionModel {
     prompt: string,
     temperature: number
   ): Promise<Set<string>> {
-    try {
-      let result = new Set<string>();
-      for (const completion of await this.query(prompt, { temperature })) {
-        result.add(trimCompletion(completion));
+    for (let i = 0; i < 3; i++) {
+      try {
+        let result = new Set<string>();
+        for (const completion of await this.query(prompt, { temperature })) {
+          let completionLines = completion.split("\n");
+          let codePart = "";
+          let started = false;
+          for (let i = 0; i < completionLines.length; i++) {
+            if (completionLines[i].startsWith("```")) {
+              if (started) break;
+              started = true;
+              continue;
+            }
+            if (started && completionLines[i].trim().length > 0) codePart += completionLines[i] + "\n";
+          }
+          if (!started) codePart = completion;
+          codePart = removeSharedPart(prompt, codePart);
+          result.add(trimCompletion(codePart));
+        }
+        return result;
+      } catch (err: any) {
+        if (err.message.includes("Request failed with status code 429")) {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          console.warn("Rate limited, retrying...");
+          continue;
+        }
+        console.warn(`Failed to get completions: ${err.message}`);
+        return new Set<string>();
       }
-      return result;
-    } catch (err: any) {
-      console.warn(`Failed to get completions: ${err.message}`);
-      return new Set<string>();
+    }
+    return new Set<string>();
+  }
+}
+
+function removeSharedPart(prompt: string, completion: string): string {
+  let result = "";
+  let completionLines = completion.split("\n");
+  let promptLines = prompt.split("\n");
+  for (let i = 0; i < completionLines.length; i++) {
+    if (!promptLines.includes(completionLines[i]) && !completionLines[i].trim().startsWith("it(") && !completionLines[i].trim().startsWith("describe(")) {
+      result += completionLines[i] + "\n";
     }
   }
+  return result;
 }
 
 if (require.main === module) {

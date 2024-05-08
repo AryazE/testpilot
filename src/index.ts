@@ -14,7 +14,7 @@ export { TestGenerator } from "./generateTests";
 export { getSnippets } from "./mineSnippets";
 export { MochaValidator } from "./mochaValidator";
 export { MockCompletionModel } from "./mockModel";
-export { Prompt, RetryPrompt } from "./promptCrafting";
+export { Prompt, RetryPromptFailedTest as RetryPrompt } from "./promptCrafting";
 export {
   IMetaData,
   ITestFailureInfo,
@@ -31,3 +31,4 @@ export {
   ITestResultCollector,
 } from "./testResultCollector";
 export { TestValidator } from "./testValidator";
+export { CodeEmbedding } from "./embedding";

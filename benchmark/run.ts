@@ -13,6 +13,7 @@ import {
   MockCompletionModel,
   TestGenerator,
   TestValidator,
+  CodeEmbedding,
 } from "..";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -39,13 +40,17 @@ export async function runExperiment(
   collector: TestResultCollector,
   timeLimit: number
 ): Promise<void> {
+  const embedding = await CodeEmbedding.getInstance();
+  const functionEmbeddings = await Promise.all(functions.map((f) => embedding(f.signature, { pooling: 'mean', normalize: true })));
   const deadline = performance.now() + timeLimit;
   const generator = new TestGenerator(
     temperatures,
     (fn) => snippetMap.get(fn),
     model,
     validator,
-    collector
+    collector,
+    functions,
+    functionEmbeddings
   );
 
   // initialize the workList with all functions

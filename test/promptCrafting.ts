@@ -3,14 +3,16 @@ import dedent from "dedent";
 import { APIFunction } from "../src/exploreAPI";
 import {
   Prompt,
-  RetryPrompt,
+  RetryPromptFailedTest,
   RetryWithError,
   SnippetIncluder,
   DocCommentIncluder,
   FunctionBodyIncluder,
   defaultPromptOptions,
+  RetryWithSignature,
 } from "../src/promptCrafting";
 import { TestOutcome } from "../src/report";
+import { CodeEmbedding, cosineSimilarity } from "../src/embedding";
 
 describe("test DocCommentIncluder", () => {
   const docCommentIncluder = new DocCommentIncluder();
@@ -156,7 +158,7 @@ describe("retry-with-error refiner", () => {
       completion,
       TestOutcome.FAILED({ message: errmsg })
     );
-    const refinedPrompt = new RetryPrompt(prompt, completion, errmsg);
+    const refinedPrompt = new RetryPromptFailedTest(prompt, completion, errmsg);
     expect(refined).to.deep.equal([refinedPrompt]);
     expect(refinedPrompt.assemble()).to.equal(
       dedent`
@@ -391,4 +393,57 @@ describe("test completion of tests", () => {
 
     expect(prompt.completeTest(body)).to.equal(expectedTest);
   });
+});
+
+describe("retry with relevant function signatures", ()=> {
+    const retryWithFuncSignatures = new RetryWithSignature();
+    it("should retry with relevant function signatures", async () => {
+        const fun = APIFunction.fromSignature("js-sdsl.Deque.constructor(container: initContainer<T> = [], _bucketSize = (1 << 12))");
+        const otherFunctions = [
+            APIFunction.fromSignature("js-sdsl.Deque.pushFront(element: T)"),
+            APIFunction.fromSignature("js-sdsl.Deque.pushBack(element: T)"),
+            APIFunction.fromSignature("js-sdsl.Deque.popFront()"),
+            APIFunction.fromSignature("js-sdsl.Deque.popBack()"),
+            APIFunction.fromSignature("js-sdsl.Deque.front()"),
+            APIFunction.fromSignature("js-sdsl.Deque.back()"),
+            APIFunction.fromSignature("js-sdsl.Deque.begin()"),
+            APIFunction.fromSignature("js-sdsl.Deque.end()"),
+        ];
+        const otherSignatures = otherFunctions.map(f => f.signature);
+        const embedding = await CodeEmbedding.getInstance();
+        const functionEmbeddings = await Promise.all(otherSignatures.map((f) => embedding(f, { pooling: 'mean', normalize: true })));
+        const prompt = new Prompt(fun, [], {...defaultPromptOptions(), ragRetries: 1});
+        const completion = `        let deque = new js_sdsl.Deque();
+        deque.push(1);
+        deque.push(2);
+        assert.equal(deque.size, 2);`;
+        expect(prompt.completeTest(completion)).to.equal(dedent`
+            let mocha = require('mocha');
+            let assert = require('assert');
+            let js_sdsl = require('js-sdsl');
+            describe('test suite', function() {
+                it('test case', function(done) {
+                    let deque = new js_sdsl.Deque();
+                    deque.push(1);
+                    deque.push(2);
+                    assert.equal(deque.size, 2);
+                })
+            })
+        `);
+        const errmsg = "push is not a function";
+        const refined = await retryWithFuncSignatures.refineAsync(prompt, completion, TestOutcome.FAILED({ message: errmsg }), otherFunctions, functionEmbeddings);
+        expect(refined[0].assemble()).to.equal(dedent`
+            let mocha = require('mocha');
+            let assert = require('assert');
+            let js_sdsl = require('js-sdsl');
+            // js-sdsl.Deque.constructor(container: initContainer<T> = [], _bucketSize = (1 << 12))
+            // js-sdsl.Deque.pushFront(element: T)
+            // js-sdsl.Deque.pushBack(element: T)
+            // js-sdsl.Deque.popFront()
+            // js-sdsl.Deque.popBack()
+            // js-sdsl.Deque.front()
+            describe('test js_sdsl', function() {
+                it('test js-sdsl.Deque.constructor', function(done) {\n
+        `);
+    });
 });

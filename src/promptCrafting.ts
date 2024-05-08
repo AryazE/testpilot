@@ -2,6 +2,10 @@ import dedent from "dedent";
 import { APIFunction, sanitizePackageName } from "./exploreAPI";
 import { TestOutcome, TestStatus } from "./report";
 import { closeBrackets, commentOut, trimAndCombineDocComment } from "./syntax";
+import { CodeEmbedding, cosineSimilarity } from "./embedding";
+
+const MaxAdditionalSignatures = 10;
+export const MaxRetrievalIterations = 3;
 
 /**
  * A strategy object for refining a prompt based on the outcome of a test
@@ -28,6 +32,8 @@ type PromptOptions = {
   includeDocComment: boolean;
   /** Whether to include the function's body in the prompt. */
   includeFunctionBody: boolean;
+  /** The number of iterations with RAG. */
+  ragRetries: number;
 };
 
 export function defaultPromptOptions(): PromptOptions {
@@ -35,6 +41,7 @@ export function defaultPromptOptions(): PromptOptions {
     includeSnippets: false,
     includeDocComment: false,
     includeFunctionBody: false,
+    ragRetries: -1,
   };
 }
 
@@ -62,6 +69,10 @@ export function defaultPromptOptions(): PromptOptions {
  * // function fn(args) {                   // -+
  * //     ...                               //  | Function body (optional)
  * // }                                     // -+
+ * // fn1(args)                             // -+
+ * // fn2(args)                             //  | Additional signatures
+ * // ...                                   //  |
+ * // fnN(args)                             // -+
  *
  * describe('test pkg', function() {        //    Test suite header
  *   it('test fn', function(done) {         //    Test case header
@@ -73,6 +84,7 @@ export function defaultPromptOptions(): PromptOptions {
 export class Prompt {
   private readonly imports: string;
   private readonly signature: string;
+  private readonly relevantSignatures: string;
   private readonly docComment: string;
   private readonly functionBody: string;
   private readonly suiteHeader: string;
@@ -82,7 +94,8 @@ export class Prompt {
   constructor(
     public readonly fun: APIFunction,
     public readonly usageSnippets: string[],
-    public readonly options: PromptOptions
+    public readonly options: PromptOptions,
+    public readonly additionalSignatures: string[] = []
   ) {
     const sanitizedPackageName = sanitizePackageName(fun.packageName);
     this.imports = dedent`
@@ -107,6 +120,15 @@ export class Prompt {
       );
     } else {
       this.docComment = "";
+    }
+
+    if (options.ragRetries >= 0) {
+      this.relevantSignatures = this.additionalSignatures.map(commentOut)
+        .slice(0, Math.min(
+          this.additionalSignatures.length, MaxAdditionalSignatures)
+        ).join("");
+    } else {
+      this.relevantSignatures = "";
     }
   }
 
@@ -135,9 +157,10 @@ export class Prompt {
     return (
       this.imports +
       this.assembleUsageSnippets() +
-      this.docComment +
+      truncateIfLong(this.docComment) +
       this.signature +
-      this.functionBody +
+      truncateIfLong(this.functionBody) +
+      this.relevantSignatures +
       this.suiteHeader +
       this.testHeader
     );
@@ -243,7 +266,7 @@ export class DocCommentIncluder implements IPromptRefiner {
   }
 }
 
-export class RetryPrompt extends Prompt {
+export class RetryPromptFailedTest extends Prompt {
   constructor(
     prev: Prompt,
     private body: string,
@@ -265,10 +288,19 @@ export class RetryPrompt extends Prompt {
       failingTest = rawFailingTest + "    })\n";
     }
 
+    let errorMessage = "";
+    if (this.err.includes("\n")) {
+      errorMessage = truncateIfLong(this.err)
+        .split("\n")
+        .map((line) => `    // ${line}`)
+        .join("\n") + "\n";
+    } else {
+      errorMessage = `    // ${this.err}\n`;
+    }
     return (
       failingTest +
       "    // the test above fails with the following error:\n" +
-      `    //   ${this.err}\n` +
+      errorMessage +
       "    // fixed test:\n" +
       this.testHeader
     );
@@ -290,10 +322,10 @@ export class RetryWithError implements IPromptRefiner {
     outcome: TestOutcome
   ): Prompt[] {
     if (
-      !(original instanceof RetryPrompt) &&
+      !(original instanceof RetryPromptFailedTest) &&
       outcome.status === TestStatus.FAILED
     ) {
-      return [new RetryPrompt(original, completion, outcome.err.message)];
+      return [new RetryPromptFailedTest(original, completion, outcome.err.message)];
     }
     return [];
   }
@@ -324,5 +356,69 @@ export class FunctionBodyIncluder implements IPromptRefiner {
       ];
     }
     return [];
+  }
+}
+
+
+/**
+ * A prompt refiner that, for a failed test, adds the relevant function
+ * signatures to the prompt and tries again.
+ */
+export class RetryWithSignature implements IPromptRefiner {
+  public get name(): string {
+    return "RetryWithSignature";
+  }
+
+  public refine(original: Prompt, body: string, outcome: TestOutcome): Prompt[] {
+    return [];
+  }
+
+  public async refineAsync(
+    original: Prompt,
+    completion: string,
+    outcome: TestOutcome,
+    functions: APIFunction[],
+    functionEmbeddings: Array<{ data: Float32Array }>
+  ): Promise<Prompt[]> {
+    if (
+      original.options.ragRetries > 0 &&
+      outcome.status === TestStatus.FAILED &&
+      (outcome.err.message.includes("is not a function") ||
+        outcome.err.message.includes("of undefined"))
+    ) {
+      const embedding = await CodeEmbedding.getInstance();
+      const functionCalls = new Set(completion.match(/([\w\.]+)\(/g));
+      if (!functionCalls) {
+          return [];
+      }
+      const callEmbeddings = await Promise.all([...functionCalls].map((f) => embedding(f, { pooling: 'mean', normalize: true })));
+      let topKSimilars: Map<string, number> = new Map();
+      for (const callEmbedding of callEmbeddings) {
+        const similarities = functionEmbeddings.map((emb) => cosineSimilarity(emb.data, callEmbedding.data));
+        const frozenSimilarities = similarities.slice();
+        similarities.sort().reverse();
+        for (const sim of similarities.slice(0, 15)) {
+          const sig = functions[frozenSimilarities.indexOf(sim)].signature;
+          if (!topKSimilars.has(sig))
+            topKSimilars.set(sig, sim);
+        }
+      }
+      return [
+        new Prompt(original.fun, original.usageSnippets, {
+          ...original.options,
+          ragRetries: original.options.ragRetries - 1,
+        }, Array.from(topKSimilars).sort((a, b) => b[1] - a[1]).map(([sig, _]) => sig)),
+      ];
+    }
+    return [];
+  }
+}
+
+function truncateIfLong(body: string): string {
+  const lines = body.split("\n");
+  if (lines.length > 30) {
+    return lines.slice(0, 30).join("\n");
+  } else {
+    return body;
   }
 }

@@ -8,6 +8,8 @@ import {
   DocCommentIncluder,
   FunctionBodyIncluder,
   defaultPromptOptions,
+  RetryWithSignature,
+  MaxRetrievalIterations,
 } from "./promptCrafting";
 import { ITestInfo, TestOutcome, TestStatus } from "./report";
 import { SnippetMap } from "./snippetHelper";
@@ -24,6 +26,7 @@ export class TestGenerator {
     new RetryWithError(),
     new DocCommentIncluder(),
     new FunctionBodyIncluder(),
+    new RetryWithSignature(),
   ];
 
   constructor(
@@ -31,7 +34,9 @@ export class TestGenerator {
     private snippetMap: SnippetMap,
     private model: ICompletionModel,
     private validator: TestValidator,
-    private collector: ITestResultCollector
+    private collector: ITestResultCollector,
+    private functions: APIFunction[],
+    private functionEmbeddings: Array<{data: Float32Array}>
   ) {}
 
   /**
@@ -42,7 +47,7 @@ export class TestGenerator {
       let generatedPassingTests = false;
       const generatedPrompts = new Map<string, Prompt>();
       const snippets = this.snippetMap(fun.functionName) ?? [];
-      const worklist = [new Prompt(fun, snippets, defaultPromptOptions())];
+      const worklist = [new Prompt(fun, snippets, {...defaultPromptOptions(), ragRetries: MaxRetrievalIterations})];
       while (worklist.length > 0) {
         const prompt = worklist.pop()!;
 
@@ -71,6 +76,7 @@ export class TestGenerator {
           }
 
           this.refinePrompts(prompt, completion, testInfo, worklist);
+          await this.asyncRefinePrompts(prompt, completion, testInfo, worklist);
         }
         this.collector.recordPromptInfo(prompt, temperature, completions);
       }
@@ -125,6 +131,7 @@ export class TestGenerator {
     worklist: Prompt[]
   ) {
     for (const refiner of this.refiners) {
+      if (refiner instanceof RetryWithSignature) continue;
       for (const refinedPrompt of refiner.refine(
         prompt,
         completion,
@@ -136,6 +143,37 @@ export class TestGenerator {
           refiner: refiner.name,
         };
         worklist.push(refinedPrompt.withProvenance(provenance));
+      }
+    }
+  }
+
+  /**
+   * Refine the prompt asynchronously based on the test outcome, and add the
+   * refined prompts to the worklist.
+   */
+  private async asyncRefinePrompts(
+    prompt: Prompt,
+    completion: string,
+    testInfo: ITestInfo,
+    worklist: Prompt[]
+  ) {
+    for (const refiner of this.refiners) {
+      if (refiner instanceof RetryWithSignature) {
+        const refinedPrompts = await refiner.refineAsync(
+          prompt,
+          completion,
+          testInfo.outcome,
+          this.functions,
+          this.functionEmbeddings
+        );
+        for (const refinedPrompt of refinedPrompts) {
+          const provenance = {
+            originalPrompt: prompt,
+            testId: testInfo.id,
+            refiner: refiner.name,
+          };
+          worklist.push(refinedPrompt.withProvenance(provenance));
+        }
       }
     }
   }
