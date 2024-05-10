@@ -80,13 +80,14 @@ export class Codex implements ICompletionModel {
       : {
           messages: [
             {
-                "role": "system",
-                "content": "You are a professional JavaScript developer. Complete the test such that it passes."
+              role: "system",
+              content:
+                "You are a professional JavaScript developer. Complete the test such that it passes.",
             },
             {
-                "role": "user",
-                "content": prompt
-            }
+              role: "user",
+              content: prompt,
+            },
           ],
           ...options,
         };
@@ -155,7 +156,8 @@ export class Codex implements ICompletionModel {
               started = true;
               continue;
             }
-            if (started && completionLines[i].trim().length > 0) codePart += completionLines[i] + "\n";
+            if (started && completionLines[i].trim().length > 0)
+              codePart += completionLines[i] + "\n";
           }
           if (!started) codePart = completion;
           codePart = removeSharedPart(prompt, codePart);
@@ -181,7 +183,11 @@ function removeSharedPart(prompt: string, completion: string): string {
   let completionLines = completion.split("\n");
   let promptLines = prompt.split("\n");
   for (let i = 0; i < completionLines.length; i++) {
-    if (!promptLines.includes(completionLines[i]) && !completionLines[i].trim().startsWith("it(") && !completionLines[i].trim().startsWith("describe(")) {
+    if (
+      !promptLines.includes(completionLines[i]) &&
+      !completionLines[i].trim().startsWith("it(") &&
+      !completionLines[i].trim().startsWith("describe(")
+    ) {
       result += completionLines[i] + "\n";
     }
   }

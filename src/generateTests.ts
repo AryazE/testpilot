@@ -35,7 +35,7 @@ export class TestGenerator {
     private validator: TestValidator,
     private collector: ITestResultCollector,
     private functions: APIFunction[],
-    private functionEmbeddings: Array<{data: Float32Array}>
+    private functionEmbeddings: Array<{ data: Float32Array }>
   ) {
     if (functionEmbeddings.length == 0) {
       this.dehallucinate = false;
@@ -82,7 +82,12 @@ export class TestGenerator {
 
           this.refinePrompts(prompt, completion, testInfo, worklist);
           if (this.dehallucinate)
-            await this.asyncRefinePrompts(prompt, completion, testInfo, worklist);
+            await this.asyncRefinePrompts(
+              prompt,
+              completion,
+              testInfo,
+              worklist
+            );
         }
         this.collector.recordPromptInfo(prompt, temperature, completions);
       }

@@ -44,7 +44,11 @@ export async function runExperiment(
   let functionEmbeddings = [];
   if (dehallucinate) {
     const embedding = await CodeEmbedding.getInstance();
-    functionEmbeddings = await Promise.all(functions.map((f) => embedding(f.signature, { pooling: 'mean', normalize: true })));
+    functionEmbeddings = await Promise.all(
+      functions.map((f) =>
+        embedding(f.signature, { pooling: "mean", normalize: true })
+      )
+    );
   }
   const deadline = performance.now() + timeLimit;
   const generator = new TestGenerator(
@@ -153,7 +157,7 @@ if (require.main === module) {
           type: "boolean",
           default: true,
           description: "whether to dehallucinate completions",
-        }
+        },
       });
     const argv = await parser.argv;
 

@@ -123,10 +123,13 @@ export class Prompt {
     }
 
     if (options.ragTries > 0 && options.ragTries <= MaxRetrievalIterations) {
-      this.relevantSignatures = this.additionalSignatures.map(commentOut)
-        .slice(0, Math.min(
-          this.additionalSignatures.length, MaxAdditionalSignatures)
-        ).join("");
+      this.relevantSignatures = this.additionalSignatures
+        .map(commentOut)
+        .slice(
+          0,
+          Math.min(this.additionalSignatures.length, MaxAdditionalSignatures)
+        )
+        .join("");
     } else {
       this.relevantSignatures = "";
     }
@@ -191,8 +194,16 @@ export class Prompt {
 
   public withProvenance(...provenanceInfos: PromptProvenance[]): Prompt {
     this.provenance.push(...provenanceInfos);
-    if (this.provenance.length > 0 && this.provenance[this.provenance.length-1].refiner.startsWith("RetryWithSignature")) {
-        this.provenance[this.provenance.length-1].refiner = this.provenance[this.provenance.length-1].refiner + " " + this.options.ragTries;
+    if (
+      this.provenance.length > 0 &&
+      this.provenance[this.provenance.length - 1].refiner.startsWith(
+        "RetryWithSignature"
+      )
+    ) {
+      this.provenance[this.provenance.length - 1].refiner =
+        this.provenance[this.provenance.length - 1].refiner +
+        " " +
+        this.options.ragTries;
     }
     return this;
   }
@@ -293,10 +304,11 @@ export class RetryPromptFailedTest extends Prompt {
 
     let errorMessage = "";
     if (this.err.includes("\n")) {
-      errorMessage = truncateIfLong(this.err)
-        .split("\n")
-        .map((line) => `    // ${line}`)
-        .join("\n") + "\n";
+      errorMessage =
+        truncateIfLong(this.err)
+          .split("\n")
+          .map((line) => `    // ${line}`)
+          .join("\n") + "\n";
     } else {
       errorMessage = `    // ${this.err}\n`;
     }
@@ -328,7 +340,9 @@ export class RetryWithError implements IPromptRefiner {
       !(original instanceof RetryPromptFailedTest) &&
       outcome.status === TestStatus.FAILED
     ) {
-      return [new RetryPromptFailedTest(original, completion, outcome.err.message)];
+      return [
+        new RetryPromptFailedTest(original, completion, outcome.err.message),
+      ];
     }
     return [];
   }
@@ -362,7 +376,6 @@ export class FunctionBodyIncluder implements IPromptRefiner {
   }
 }
 
-
 /**
  * A prompt refiner that, for a failed test, adds the relevant function
  * signatures to the prompt and tries again.
@@ -372,7 +385,11 @@ export class RetryWithSignature implements IPromptRefiner {
     return "RetryWithSignature";
   }
 
-  public refine(original: Prompt, body: string, outcome: TestOutcome): Prompt[] {
+  public refine(
+    original: Prompt,
+    body: string,
+    outcome: TestOutcome
+  ): Prompt[] {
     return [];
   }
 
@@ -392,25 +409,37 @@ export class RetryWithSignature implements IPromptRefiner {
       const embedding = await CodeEmbedding.getInstance();
       const functionCalls = new Set(completion.match(/([\w\.]+)\(/g));
       if (!functionCalls) {
-          return [];
+        return [];
       }
-      const callEmbeddings = await Promise.all([...functionCalls].map((f) => embedding(f, { pooling: 'mean', normalize: true })));
+      const callEmbeddings = await Promise.all(
+        [...functionCalls].map((f) =>
+          embedding(f, { pooling: "mean", normalize: true })
+        )
+      );
       let topKSimilars: Map<string, number> = new Map();
       for (const callEmbedding of callEmbeddings) {
-        const similarities = functionEmbeddings.map((emb) => cosineSimilarity(emb.data, callEmbedding.data));
+        const similarities = functionEmbeddings.map((emb) =>
+          cosineSimilarity(emb.data, callEmbedding.data)
+        );
         const frozenSimilarities = similarities.slice();
         similarities.sort().reverse();
         for (const sim of similarities.slice(0, 15)) {
           const sig = functions[frozenSimilarities.indexOf(sim)].signature;
-          if (!topKSimilars.has(sig))
-            topKSimilars.set(sig, sim);
+          if (!topKSimilars.has(sig)) topKSimilars.set(sig, sim);
         }
       }
       return [
-        new Prompt(original.fun, original.usageSnippets, {
-          ...original.options,
-          ragTries: original.options.ragTries + 1,
-        }, Array.from(topKSimilars).sort((a, b) => b[1] - a[1]).map(([sig, _]) => sig)),
+        new Prompt(
+          original.fun,
+          original.usageSnippets,
+          {
+            ...original.options,
+            ragTries: original.options.ragTries + 1,
+          },
+          Array.from(topKSimilars)
+            .sort((a, b) => b[1] - a[1])
+            .map(([sig, _]) => sig)
+        ),
       ];
     }
     return [];
