@@ -38,10 +38,14 @@ export async function runExperiment(
   model: ICompletionModel,
   validator: TestValidator,
   collector: TestResultCollector,
-  timeLimit: number
+  timeLimit: number,
+  dehallucinate: boolean
 ): Promise<void> {
-  const embedding = await CodeEmbedding.getInstance();
-  const functionEmbeddings = await Promise.all(functions.map((f) => embedding(f.signature, { pooling: 'mean', normalize: true })));
+  let functionEmbeddings = [];
+  if (dehallucinate) {
+    const embedding = await CodeEmbedding.getInstance();
+    functionEmbeddings = await Promise.all(functions.map((f) => embedding(f.signature, { pooling: 'mean', normalize: true })));
+  }
   const deadline = performance.now() + timeLimit;
   const generator = new TestGenerator(
     temperatures,
@@ -145,6 +149,11 @@ if (require.main === module) {
           default: "gpt",
           description: "LLM api to use",
         },
+        dehallucinate: {
+          type: "boolean",
+          default: true,
+          description: "whether to dehallucinate completions",
+        }
       });
     const argv = await parser.argv;
 
@@ -276,7 +285,8 @@ if (require.main === module) {
         model,
         validator,
         collector,
-        argv.timeLimit * 1000
+        argv.timeLimit * 1000,
+        argv.dehallucinate
       );
       collector.report();
       const report = collector.getReport();

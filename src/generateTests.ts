@@ -9,7 +9,6 @@ import {
   FunctionBodyIncluder,
   defaultPromptOptions,
   RetryWithSignature,
-  MaxRetrievalIterations,
 } from "./promptCrafting";
 import { ITestInfo, TestOutcome, TestStatus } from "./report";
 import { SnippetMap } from "./snippetHelper";
@@ -26,8 +25,8 @@ export class TestGenerator {
     new RetryWithError(),
     new DocCommentIncluder(),
     new FunctionBodyIncluder(),
-    new RetryWithSignature(),
   ];
+  private dehallucinate = true;
 
   constructor(
     private temperatures: number[],
@@ -37,7 +36,13 @@ export class TestGenerator {
     private collector: ITestResultCollector,
     private functions: APIFunction[],
     private functionEmbeddings: Array<{data: Float32Array}>
-  ) {}
+  ) {
+    if (functionEmbeddings.length == 0) {
+      this.dehallucinate = false;
+    } else {
+      this.refiners.push(new RetryWithSignature());
+    }
+  }
 
   /**
    * Generate tests for a given function and validate them.
@@ -47,7 +52,7 @@ export class TestGenerator {
       let generatedPassingTests = false;
       const generatedPrompts = new Map<string, Prompt>();
       const snippets = this.snippetMap(fun.functionName) ?? [];
-      const worklist = [new Prompt(fun, snippets, {...defaultPromptOptions(), ragRetries: MaxRetrievalIterations})];
+      const worklist = [new Prompt(fun, snippets, defaultPromptOptions())];
       while (worklist.length > 0) {
         const prompt = worklist.pop()!;
 
@@ -76,7 +81,8 @@ export class TestGenerator {
           }
 
           this.refinePrompts(prompt, completion, testInfo, worklist);
-          await this.asyncRefinePrompts(prompt, completion, testInfo, worklist);
+          if (this.dehallucinate)
+            await this.asyncRefinePrompts(prompt, completion, testInfo, worklist);
         }
         this.collector.recordPromptInfo(prompt, temperature, completions);
       }

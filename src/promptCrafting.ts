@@ -5,7 +5,7 @@ import { closeBrackets, commentOut, trimAndCombineDocComment } from "./syntax";
 import { CodeEmbedding, cosineSimilarity } from "./embedding";
 
 const MaxAdditionalSignatures = 10;
-export const MaxRetrievalIterations = 3;
+const MaxRetrievalIterations = 3;
 
 /**
  * A strategy object for refining a prompt based on the outcome of a test
@@ -33,7 +33,7 @@ type PromptOptions = {
   /** Whether to include the function's body in the prompt. */
   includeFunctionBody: boolean;
   /** The number of iterations with RAG. */
-  ragRetries: number;
+  ragTries: number;
 };
 
 export function defaultPromptOptions(): PromptOptions {
@@ -41,7 +41,7 @@ export function defaultPromptOptions(): PromptOptions {
     includeSnippets: false,
     includeDocComment: false,
     includeFunctionBody: false,
-    ragRetries: -1,
+    ragTries: 0,
   };
 }
 
@@ -122,7 +122,7 @@ export class Prompt {
       this.docComment = "";
     }
 
-    if (options.ragRetries >= 0) {
+    if (options.ragTries > 0 && options.ragTries <= MaxRetrievalIterations) {
       this.relevantSignatures = this.additionalSignatures.map(commentOut)
         .slice(0, Math.min(
           this.additionalSignatures.length, MaxAdditionalSignatures)
@@ -191,6 +191,9 @@ export class Prompt {
 
   public withProvenance(...provenanceInfos: PromptProvenance[]): Prompt {
     this.provenance.push(...provenanceInfos);
+    if (this.provenance.length > 0 && this.provenance[this.provenance.length-1].refiner.startsWith("RetryWithSignature")) {
+        this.provenance[this.provenance.length-1].refiner = this.provenance[this.provenance.length-1].refiner + " " + this.options.ragTries;
+    }
     return this;
   }
 
@@ -381,7 +384,7 @@ export class RetryWithSignature implements IPromptRefiner {
     functionEmbeddings: Array<{ data: Float32Array }>
   ): Promise<Prompt[]> {
     if (
-      original.options.ragRetries > 0 &&
+      original.options.ragTries < MaxRetrievalIterations &&
       outcome.status === TestStatus.FAILED &&
       (outcome.err.message.includes("is not a function") ||
         outcome.err.message.includes("of undefined"))
@@ -406,7 +409,7 @@ export class RetryWithSignature implements IPromptRefiner {
       return [
         new Prompt(original.fun, original.usageSnippets, {
           ...original.options,
-          ragRetries: original.options.ragRetries - 1,
+          ragTries: original.options.ragTries + 1,
         }, Array.from(topKSimilars).sort((a, b) => b[1] - a[1]).map(([sig, _]) => sig)),
       ];
     }
@@ -417,7 +420,7 @@ export class RetryWithSignature implements IPromptRefiner {
 function truncateIfLong(body: string): string {
   const lines = body.split("\n");
   if (lines.length > 30) {
-    return lines.slice(0, 30).join("\n");
+    return lines.slice(0, 30).join("\n") + "\n";
   } else {
     return body;
   }
