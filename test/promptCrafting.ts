@@ -172,7 +172,7 @@ describe("retry-with-error refiner", () => {
                     assert(plus(1, 1), 3);
                 })
                 // the test above fails with the following error:
-                //   expected 2 to equal 3
+                // expected 2 to equal 3
                 // fixed test:
                 it('test plus', function(done) {
         ` + "\n"
