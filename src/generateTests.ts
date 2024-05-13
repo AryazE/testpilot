@@ -1,5 +1,5 @@
 import { ICompletionModel } from "./completionModel";
-import { APIFunction } from "./exploreAPI";
+import { APIFunction, ApiElementDescriptor } from "./exploreAPI";
 import {
   IPromptRefiner,
   Prompt,
@@ -34,10 +34,10 @@ export class TestGenerator {
     private model: ICompletionModel,
     private validator: TestValidator,
     private collector: ITestResultCollector,
-    private functions: APIFunction[],
-    private functionEmbeddings: Array<{ data: Float32Array }>
+    private fullAPI: { accessPath: string; descriptor: ApiElementDescriptor; packageName: string }[],
+    private apiEmbeddings: Array<{ data: Float32Array }>
   ) {
-    if (functionEmbeddings.length == 0) {
+    if (apiEmbeddings.length == 0) {
       this.dehallucinate = false;
     } else {
       this.refiners.push(new RetryWithSignature());
@@ -174,8 +174,8 @@ export class TestGenerator {
           prompt,
           completion,
           testInfo.outcome,
-          this.functions,
-          this.functionEmbeddings
+          this.fullAPI,
+          this.apiEmbeddings
         );
         for (const refinedPrompt of refinedPrompts) {
           const provenance = {

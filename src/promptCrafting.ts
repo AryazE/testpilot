@@ -1,5 +1,5 @@
 import dedent from "dedent";
-import { APIFunction, sanitizePackageName } from "./exploreAPI";
+import { APIFunction, ApiElementDescriptor, sanitizePackageName } from "./exploreAPI";
 import { TestOutcome, TestStatus } from "./report";
 import { closeBrackets, commentOut, trimAndCombineDocComment } from "./syntax";
 import { CodeEmbedding, cosineSimilarity } from "./embedding";
@@ -397,8 +397,8 @@ export class RetryWithSignature implements IPromptRefiner {
     original: Prompt,
     completion: string,
     outcome: TestOutcome,
-    functions: APIFunction[],
-    functionEmbeddings: Array<{ data: Float32Array }>
+    fullAPI: { accessPath: string; descriptor: ApiElementDescriptor, packageName: string }[],
+    apiEmbeddings: Array<{ data: Float32Array }>
   ): Promise<Prompt[]> {
     if (
       original.options.ragTries < MaxRetrievalIterations &&
@@ -408,23 +408,27 @@ export class RetryWithSignature implements IPromptRefiner {
     ) {
       const embedding = await CodeEmbedding.getInstance();
       const functionCalls = new Set(completion.match(/([\w\.]+)\(/g));
-      if (!functionCalls) {
+      const attributeAccesses = new Set(completion.match(/(\w+(?:\.\w+)+)(?!\()/g));
+      if (!functionCalls && !attributeAccesses) {
         return [];
       }
-      const callEmbeddings = await Promise.all(
-        [...functionCalls].map((f) =>
+      const allEmbeddings = await Promise.all(
+        [...functionCalls, ...attributeAccesses].map((f) =>
           embedding(f, { pooling: "mean", normalize: true })
         )
       );
       let topKSimilars: Map<string, number> = new Map();
-      for (const callEmbedding of callEmbeddings) {
-        const similarities = functionEmbeddings.map((emb) =>
-          cosineSimilarity(emb.data, callEmbedding.data)
+      for (const singleEmbedding of allEmbeddings) {
+        const similarities = apiEmbeddings.map((emb) =>
+          cosineSimilarity(emb.data, singleEmbedding.data)
         );
         const frozenSimilarities = similarities.slice();
         similarities.sort().reverse();
         for (const sim of similarities.slice(0, 15)) {
-          const sig = functions[frozenSimilarities.indexOf(sim)].signature;
+          const apiElement = fullAPI[frozenSimilarities.indexOf(sim)];
+          let sig = apiElement.accessPath;
+          if (apiElement.descriptor.type === "function")
+            sig += apiElement.descriptor.signature;
           if (!topKSimilars.has(sig)) topKSimilars.set(sig, sim);
         }
       }

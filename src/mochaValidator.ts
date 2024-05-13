@@ -157,7 +157,7 @@ export class MochaValidator extends TestValidator {
 
     // no need to keep coverage data for invalid tests
     if (outcome.status != "PASSED") {
-      fs.rmdirSync(coverageDir, { recursive: true });
+      fs.rmSync(coverageDir, { recursive: true, force: true });
     }
     return outcome;
   }
@@ -181,7 +181,7 @@ export class MochaValidator extends TestValidator {
       // create/clean .nyc_output directory
       const nycOutput = path.join(this.packagePath, ".nyc_output");
       if (fs.existsSync(nycOutput)) {
-        fs.rmdirSync(nycOutput, { recursive: true });
+        fs.rmSync(nycOutput, { recursive: true, force: true });
       }
       fs.mkdirSync(nycOutput);
 
@@ -217,7 +217,7 @@ export class MochaValidator extends TestValidator {
         );
       }
     } finally {
-      fs.rmdirSync(testDir, { recursive: true });
+      fs.rmSync(testDir, { recursive: true, force: true });
     }
   }
 
@@ -234,7 +234,7 @@ export class MochaValidator extends TestValidator {
 
   public cleanup(): void {
     for (const coverageDir of this.coverageDirs) {
-      fs.rmdirSync(coverageDir, { recursive: true });
+      fs.rmSync(coverageDir, { recursive: true, force: true });
     }
   }
 }

@@ -14,6 +14,7 @@ import {
   TestGenerator,
   TestValidator,
   CodeEmbedding,
+  ApiElementDescriptor,
 } from "..";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -33,6 +34,7 @@ require("console-stamp")(console);
  */
 export async function runExperiment(
   functions: APIFunction[],
+  fullAPI: {accessPath: string, descriptor: ApiElementDescriptor, packageName: string}[],
   temperatures: number[],
   snippetMap: Map<string, string[]>,
   model: ICompletionModel,
@@ -41,12 +43,12 @@ export async function runExperiment(
   timeLimit: number,
   dehallucinate: boolean
 ): Promise<void> {
-  let functionEmbeddings = [];
+  let apiEmbeddings = [];
   if (dehallucinate) {
     const embedding = await CodeEmbedding.getInstance();
-    functionEmbeddings = await Promise.all(
-      functions.map((f) =>
-        embedding(f.signature, { pooling: "mean", normalize: true })
+    apiEmbeddings = await Promise.all(
+      fullAPI.map((f) =>
+        embedding((f.descriptor.type === "function")?(f.accessPath + f.descriptor.signature):f.accessPath, { pooling: "mean", normalize: true })
       )
     );
   }
@@ -57,8 +59,8 @@ export async function runExperiment(
     model,
     validator,
     collector,
-    functions,
-    functionEmbeddings
+    fullAPI,
+    apiEmbeddings
   );
 
   // initialize the workList with all functions
@@ -184,19 +186,29 @@ if (require.main === module) {
     console.log(`Running experiment for ${packageName}`);
 
     let api: APIFunction[];
+    let fullAPI: { accessPath: string; descriptor: ApiElementDescriptor; packageName: string }[];
     if (argv.api) {
       console.log(`Loading API from ${argv.api}`);
       const rawApi: {
         accessPath: string;
-        descriptor: FunctionDescriptor;
+        descriptor: ApiElementDescriptor;
       }[] = JSON.parse(fs.readFileSync(argv.api, "utf8"));
-      api = rawApi.map(
+      fullAPI = rawApi.map(
         ({ accessPath, descriptor }) =>
-          new APIFunction(accessPath, descriptor, packageName)
+          ({ accessPath, descriptor, packageName })
+      );
+      const onlyFunctions: {
+        accessPath: string,
+        descriptor: FunctionDescriptor,
+        packageName: string
+      }[] = fullAPI.filter((f): f is APIFunction => f.descriptor.type === "function");
+      api = onlyFunctions.map(({accessPath, descriptor, packageName}) =>
+        new APIFunction(accessPath, descriptor, packageName)
       );
     } else {
       console.log("Exploring API");
       api = Array.from(exploreAPI(packagePath).getFunctions(packageName));
+      fullAPI = Array.from(exploreAPI(packagePath).getAll(packageName));
     }
 
     let numSnippets: number | "all" =
@@ -284,6 +296,7 @@ if (require.main === module) {
     try {
       await runExperiment(
         api,
+        fullAPI,
         argv.temperatures.split(/\s+/).map(parseFloat),
         allSnippets,
         model,

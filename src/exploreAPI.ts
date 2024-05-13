@@ -5,7 +5,7 @@ import * as espree from "espree";
 import * as estraverse from "estraverse";
 import { performance } from "perf_hooks";
 
-function extend(accessPath: string, component: string) {
+function extend(accessPath: string, component: string): string {
   if (component === "default" && !accessPath.includes(".")) {
     return accessPath;
   } else if (component.match(/^[a-zA-Z_$][\w$]*$/)) {
@@ -58,6 +58,12 @@ export class API {
       if (descriptor.type === "function") {
         yield new APIFunction(accessPath, descriptor, packageName);
       }
+    }
+  }
+
+  *getAll(packageName: string) {
+    for (const [accessPath, descriptor] of this.elements) {
+      yield { accessPath, descriptor, packageName };
     }
   }
 
@@ -301,8 +307,11 @@ function exploreExports(
         ) {
           continue;
         }
-
-        explore(extend(accessPath, prop), value[prop]);
+        try {
+          explore(extend(accessPath, prop), value[prop]);
+        } catch (e) {
+          console.warn(`Error exploring ${accessPath}.${prop}: ${e}`);
+        }
       }
     }
   }

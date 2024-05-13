@@ -82,7 +82,7 @@ export class Codex implements ICompletionModel {
             {
               role: "system",
               content:
-                "You are a professional JavaScript developer. Complete the test such that it passes.",
+                "You are a professional JavaScript developer. Your task is to test the provided library and cover the most code. Complete the test such that it passes.",
             },
             {
               role: "user",
