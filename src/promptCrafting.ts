@@ -69,7 +69,8 @@ export function defaultPromptOptions(): PromptOptions {
  * // function fn(args) {                   // -+
  * //     ...                               //  | Function body (optional)
  * // }                                     // -+
- * // fn1(args)                             // -+
+ * // API Reference:                        // -+
+ * // fn1(args)                             //  |
  * // fn2(args)                             //  | Additional signatures
  * // ...                                   //  |
  * // fnN(args)                             // -+
@@ -123,7 +124,7 @@ export class Prompt {
     }
 
     if (options.ragTries > 0 && options.ragTries <= MaxRetrievalIterations) {
-      this.relevantSignatures = this.additionalSignatures
+      this.relevantSignatures = "// API Reference:\n" + this.additionalSignatures
         .map(commentOut)
         .slice(
           0,

@@ -11,6 +11,7 @@ import {
   ICompletionModel,
   MochaValidator,
   MockCompletionModel,
+  CachedCompletionModel,
   TestGenerator,
   TestValidator,
   CodeEmbedding,
@@ -172,10 +173,14 @@ if (require.main === module) {
       }
       model = new Codex(argv.model === "starcoder", { n: argv.numCompletions });
     } else {
-      model = MockCompletionModel.fromFile(
-        argv.responses,
-        argv.strictResponses
-      );
+      if (argv.strictResponses) {
+        model = MockCompletionModel.fromFile(
+          argv.responses,
+          argv.strictResponses
+        );
+      } else {
+        model = new CachedCompletionModel(argv.strictResponses, argv.responses, argv.model === "starcoder", { n: argv.numCompletions });
+      }
     }
 
     const packagePath = argv.package;
