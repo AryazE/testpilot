@@ -54,6 +54,7 @@ describe("TestGenerator", () => {
     prompts: {
       prompt: Prompt;
       tests: { completion: string; passes: boolean }[];
+      usedTokens: number;
     }[]
   ) {
     const model = new MockCompletionModel(true);
@@ -77,17 +78,18 @@ describe("TestGenerator", () => {
     let promptCounter = 0,
       testCounter = 0;
     let testInfos: Map<string, ITestInfo> = new Map();
-    for (const { prompt, tests } of prompts) {
+    for (const { prompt, tests, usedTokens } of prompts) {
       const id = promptCounter++;
       const temperature = 0.0;
       const completions = tests.map((t) => t.completion);
-      model.addCompletions(prompt.assemble(), temperature, completions);
+      model.addCompletions(prompt.assemble(), temperature, completions, usedTokens);
       expectedPromptInfos.push({
         id,
         prompt,
         temperature,
         file: `prompt_${id}.js`,
         completions: new Set(completions),
+        usedTokens,
       });
 
       for (const { completion, passes } of tests) {
@@ -132,6 +134,7 @@ describe("TestGenerator", () => {
         {
           prompt: new Prompt(fun, [], defaultPromptOptions()),
           tests: [{ completion: cmp, passes: true }],
+          usedTokens: 124,
         },
       ]
     );
@@ -164,10 +167,12 @@ describe("TestGenerator", () => {
             { completion: cmp1, passes: true },
             { completion: cmp2, passes: false },
           ],
+          usedTokens: 148,
         },
         {
           prompt: refinedPrompt,
           tests: [],
+          usedTokens: 0,
         },
       ]
     );
@@ -208,14 +213,17 @@ describe("TestGenerator", () => {
         {
           prompt: initialPrompt,
           tests: [{ completion: cmp1, passes: true }],
+          usedTokens: 124,
         },
         {
           prompt: refinedPrompt,
           tests: [{ completion: cmp2, passes: false }],
+          usedTokens: 148,
         },
         {
           prompt: refinedPrompt2,
           tests: [],
+          usedTokens: 0,
         },
       ]
     );
@@ -243,10 +251,12 @@ describe("TestGenerator", () => {
         {
           prompt: initialPrompt,
           tests: [{ completion: cmp, passes: true }],
+          usedTokens: 124,
         },
         {
           prompt: refinedPrompt,
           tests: [{ completion: cmp, passes: true }],
+          usedTokens: 124,
         },
       ]
     );
@@ -286,10 +296,12 @@ describe("TestGenerator", () => {
             { completion: cmp1, passes: true },
             { completion: cmp2, passes: true },
           ],
+          usedTokens: 148,
         },
         {
           prompt: refinedPrompt,
           tests: [],
+          usedTokens: 0,
         },
       ]
     );
@@ -335,14 +347,17 @@ describe("TestGenerator", () => {
         {
           prompt: initialPrompt,
           tests: [{ completion: invalidCmp, passes: false }],
+          usedTokens: 124,
         },
         {
           prompt: retryPrompt,
           tests: [],
+          usedTokens: 0,
         },
         {
           prompt: refinedPrompt,
           tests: [{ completion: validCmp, passes: true }],
+          usedTokens: 124,
         },
       ]
     );

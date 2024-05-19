@@ -13,6 +13,8 @@ export interface IPromptInfo {
   temperature: number;
   /** The set of completions obtained for this prompt. */
   completions: Set<string>;
+  /** The number of tokens used in the completions. */
+  usedTokens: number;
 }
 
 export interface ITestResultCollector {
@@ -46,7 +48,8 @@ export interface ITestResultCollector {
   recordPromptInfo(
     prompt: Prompt,
     temperature: number,
-    completions: Set<string>
+    completions: Set<string>,
+    usedTokens: number
   ): void;
 
   /**
@@ -100,11 +103,12 @@ class BaseTestResultCollector implements ITestResultCollector {
   public recordPromptInfo(
     prompt: Prompt,
     temperature: number,
-    completions: Set<string>
+    completions: Set<string>,
+    usedTokens: number
   ) {
     const id = this.prompts.size;
     const file = `prompt_${id}.js`;
-    this.prompts.set(prompt, { prompt, id, file, temperature, completions });
+    this.prompts.set(prompt, { prompt, id, file, temperature, completions, usedTokens });
   }
 
   public recordCoverageInfo(coverageSummary: ICoverageSummary) {

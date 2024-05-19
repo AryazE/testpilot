@@ -1,7 +1,7 @@
 import axios from "axios";
 import fs from "fs";
 import { performance } from "perf_hooks";
-import { ICompletionModel } from "./completionModel";
+import { CompletionSet, ICompletionModel } from "./completionModel";
 import { trimCompletion } from "./syntax";
 
 const defaultPostOptions = {
@@ -53,7 +53,7 @@ export class Codex implements ICompletionModel {
   public async query(
     prompt: string,
     requestPostOptions: PostOptions = {}
-  ): Promise<Set<string>> {
+  ): Promise<CompletionSet> {
     const headers = {
       "Content-Type": "application/json",
       ...JSON.parse(this.authHeaders),
@@ -131,7 +131,10 @@ export class Codex implements ICompletionModel {
         `${numContentFiltered} completions were truncated due to content filtering.`
       );
     }
-    return completions;
+    return {
+      completions,
+      usedTokens: json.usage.total_tokens,
+    };
   }
 
   /**
@@ -142,11 +145,12 @@ export class Codex implements ICompletionModel {
   public async completions(
     prompt: string,
     temperature: number
-  ): Promise<Set<string>> {
+  ): Promise<CompletionSet> {
     for (let i = 0; i < 3; i++) {
       try {
         let result = new Set<string>();
-        for (const completion of await this.query(prompt, { temperature })) {
+        const { completions, usedTokens } = await this.query(prompt, { temperature });
+        for (const completion of completions) {
           let completionLines = completion.split("\n");
           let codePart = "";
           let started = false;
@@ -163,7 +167,10 @@ export class Codex implements ICompletionModel {
           codePart = removeSharedPart(prompt, codePart);
           result.add(trimCompletion(codePart));
         }
-        return result;
+        return {
+          completions: result,
+          usedTokens,
+        };
       } catch (err: any) {
         if (err.message.includes("Request failed with status code 429")) {
           await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -171,10 +178,16 @@ export class Codex implements ICompletionModel {
           continue;
         }
         console.warn(`Failed to get completions: ${err.message}`);
-        return new Set<string>();
+        return {
+          completions: new Set<string>(),
+          usedTokens: 0,
+        };
       }
     }
-    return new Set<string>();
+    return {
+      completions: new Set<string>(),
+      usedTokens: 0,
+    };
   }
 }
 
@@ -199,7 +212,7 @@ if (require.main === module) {
     const codex = new Codex(false);
     const prompt = fs.readFileSync(0, "utf8");
     const responses = await codex.query(prompt, { n: 1 });
-    console.log([...responses][0]);
+    console.log([...responses.completions][0]);
   })().catch((err) => {
     console.error(err);
     process.exit(1);

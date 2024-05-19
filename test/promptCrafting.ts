@@ -452,6 +452,7 @@ describe("retry with relevant function signatures", () => {
             let assert = require('assert');
             let js_sdsl = require('js-sdsl');
             // js-sdsl.Deque.constructor(container: initContainer<T> = [], _bucketSize = (1 << 12))
+            // API Reference:
             // js-sdsl.Deque.begin()
             // js-sdsl.Deque.end()
             // js-sdsl.Deque.front()
