@@ -123,7 +123,7 @@ export class Prompt {
       this.docComment = "";
     }
 
-    if (options.ragTries > 0 && options.ragTries <= MaxRetrievalIterations) {
+    if (options.ragTries > 0 && options.ragTries <= MaxRetrievalIterations && this.additionalSignatures.length > 0) {
       this.relevantSignatures = "// API Reference:\n" + this.additionalSignatures
         .map(commentOut)
         .slice(

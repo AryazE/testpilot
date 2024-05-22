@@ -1,3 +1,5 @@
+import { PostOptions } from "./codex";
+
 export type CompletionSet = {
   completions: Set<string>;
   usedTokens: number;
@@ -10,5 +12,10 @@ export interface ICompletionModel {
   /**
    * Get a set of completions for the given prompt with the given sampling temperature.
    */
-  completions(prompt: string, temperature: number): Promise<CompletionSet>;
+  completions(prompt: string, postOptions: PostOptions): Promise<CompletionSet>;
+
+  /**
+   * Get the number of token used.
+   */
+  usedTokens(): number;
 }

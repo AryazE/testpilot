@@ -6,7 +6,7 @@ import { trimCompletion } from "./syntax";
 
 const defaultPostOptions = {
   model: "gpt-3.5-turbo-0125", // model to use
-  max_tokens: 100, // maximum number of tokens to return
+  max_tokens: 200, // maximum number of tokens to return
   temperature: 0, // sampling temperature; higher values increase diversity
   n: 5, // number of completions to return
   top_p: 1, // no need to change this
@@ -25,9 +25,11 @@ function getEnv(name: string): string {
 export class Codex implements ICompletionModel {
   private readonly apiEndpoint: string;
   private readonly authHeaders: string;
+  private totalTokens = 0;
 
   constructor(
     private readonly isStarCoder: boolean,
+    private readonly tokenLimit: number = 4096,
     private readonly instanceOptions: PostOptions = {}
   ) {
     this.apiEndpoint = this.isStarCoder
@@ -82,7 +84,11 @@ export class Codex implements ICompletionModel {
             {
               role: "system",
               content:
-                "You are a professional JavaScript developer. Your task is to test the provided library and cover the most code. Complete the test such that it passes.",
+                "You are a professional JavaScript developer.",
+            },
+            {
+              role: "user",
+              content: `Your task is to test the library and cover the most code. Complete the following test such that it passes. It is cruicial to call done() within the first ${defaultPostOptions.max_tokens} tokens.`
             },
             {
               role: "user",
@@ -131,6 +137,7 @@ export class Codex implements ICompletionModel {
         `${numContentFiltered} completions were truncated due to content filtering.`
       );
     }
+    this.totalTokens += json.usage.total_tokens;
     return {
       completions,
       usedTokens: json.usage.total_tokens,
@@ -144,12 +151,13 @@ export class Codex implements ICompletionModel {
    */
   public async completions(
     prompt: string,
-    temperature: number
+    postOptions: PostOptions = {}
   ): Promise<CompletionSet> {
     for (let i = 0; i < 3; i++) {
       try {
         let result = new Set<string>();
-        const { completions, usedTokens } = await this.query(prompt, { temperature });
+        if (this.tokenLimit > 0 && this.totalTokens > this.tokenLimit) break;
+        const { completions, usedTokens } = await this.query(prompt, postOptions);
         for (const completion of completions) {
           let completionLines = completion.split("\n");
           let codePart = "";
@@ -188,6 +196,10 @@ export class Codex implements ICompletionModel {
       completions: new Set<string>(),
       usedTokens: 0,
     };
+  }
+
+  public usedTokens(): number {
+    return this.totalTokens;
   }
 }
 

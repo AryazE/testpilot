@@ -1,0 +1,4 @@
+# Takes the name of the package as input.
+# Usage: ./run_multiple.sh <package-name>
+~/testpilot/node_modules/.bin/dotenvx run -- node ~/testpilot/benchmark/run.js --outputDir ~/testpilot/reports/$1-dehallucinator --package ~/testpilot/node_modules/$1 --timeLimit 3600 --tokenLimit 700000 --dehallucinate --temperatures "0.1" --numCompletions 2
+~/testpilot/node_modules/.bin/dotenvx run -- node ~/testpilot/benchmark/run.js --outputDir ~/testpilot/reports/$1 --package ~/testpilot/node_modules/$1 --timeLimit 3600 --tokenLimit 700000 --no-dehallucinate --temperatures "0.1" --numCompletions 6 --responses ~/testpilot/reports/$1-dehallucinator/prompts.json --no-strictResponses

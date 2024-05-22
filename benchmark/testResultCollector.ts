@@ -235,7 +235,7 @@ export class TestResultCollector extends BaseTestResultCollector {
     let prompts = {
       metaData: this.metaData,
       prompts: [...this.prompts.values()].map(
-        ({ prompt, id, file, temperature, completions }) => {
+        ({ prompt, id, file, temperature, completions, usedTokens }) => {
           const tests = [...this.tests.values()]
             .filter((test) => test.prompts.includes(prompt))
             .map((test) => test.testName);
@@ -249,10 +249,16 @@ export class TestResultCollector extends BaseTestResultCollector {
             file,
             temperature,
             completions: [...completions.values()],
+            usedTokens,
             tests,
             provenance,
           };
         }
+      ),
+      tokensUsed: [...this.prompts.values()].map(
+        ({ prompt, id, file, temperature, completions, usedTokens }) => usedTokens
+      ).reduce(
+        (acc, val) => acc + val,
       ),
     };
     fs.writeFileSync(

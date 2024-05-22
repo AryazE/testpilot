@@ -42,6 +42,7 @@ export async function runExperiment(
   validator: TestValidator,
   collector: TestResultCollector,
   timeLimit: number,
+  tokenLimit: number,
   dehallucinate: boolean
 ): Promise<void> {
   let apiEmbeddings = [];
@@ -71,6 +72,12 @@ export async function runExperiment(
     if (performance.now() > deadline) {
       console.log(
         `Time limit reached, ${workList.length} worklist items ignored.`
+      );
+      break;
+    }
+    if (model.usedTokens() > tokenLimit) {
+      console.log(
+        `Token limit reached, ${workList.length} worklist items ignored.`
       );
       break;
     }
@@ -123,6 +130,11 @@ if (require.main === module) {
           default: 5 * 60 * 60,
           description: "time limit in seconds (default is five hours)",
         },
+        tokenLimit: {
+          type: "number",
+          default: -1,
+          description: "token limit for completions",
+        },
         numSnippets: {
           default: "all",
           description:
@@ -163,6 +175,15 @@ if (require.main === module) {
         },
       });
     const argv = await parser.argv;
+    let tokenLimit = argv.tokenLimit;
+    if (argv.responses) {
+      const prompts = JSON.parse(
+        fs.readFileSync(argv.responses, "utf8")
+      );
+      if (prompts.usedTokens) {
+        tokenLimit = prompts.usedTokens;
+      }
+    }
 
     var model: ICompletionModel;
     if (!argv.responses) {
@@ -171,15 +192,16 @@ if (require.main === module) {
           "Warning: --strictResponses has no effect when not using --responses"
         );
       }
-      model = new Codex(argv.model === "starcoder", { n: argv.numCompletions });
+      model = new Codex(argv.model === "starcoder", tokenLimit, { n: argv.numCompletions });
     } else {
       if (argv.strictResponses) {
         model = MockCompletionModel.fromFile(
           argv.responses,
-          argv.strictResponses
+          argv.strictResponses,
+          tokenLimit
         );
       } else {
-        model = new CachedCompletionModel(argv.strictResponses, argv.responses, argv.model === "starcoder", { n: argv.numCompletions });
+        model = new CachedCompletionModel(argv.strictResponses, argv.responses, argv.model === "starcoder", tokenLimit, { n: argv.numCompletions });
       }
     }
 
@@ -308,6 +330,7 @@ if (require.main === module) {
         validator,
         collector,
         argv.timeLimit * 1000,
+        tokenLimit,
         argv.dehallucinate
       );
       collector.report();

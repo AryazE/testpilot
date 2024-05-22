@@ -68,7 +68,7 @@ export class TestGenerator {
 
         const { completions, usedTokens } = await this.model.completions(
           prompt.assemble(),
-          temperature
+          { temperature }
         );
         for (const completion of completions) {
           const testInfo = this.validateCompletion(
