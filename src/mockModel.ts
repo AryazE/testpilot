@@ -34,7 +34,6 @@ export class MockCompletionModel implements ICompletionModel {
     usedTokens: number
   ) {
     this.completionMap.set(this.key(prompt, temperature), { completions: new Set(completions), usedTokens });
-    this.totalTokens += usedTokens;
   }
 
   public async completions(
@@ -50,6 +49,7 @@ export class MockCompletionModel implements ICompletionModel {
         console.warn(err);
       }
     }
+    this.totalTokens += usedTokens;
     return {
       completions: new Set(completions),
       usedTokens

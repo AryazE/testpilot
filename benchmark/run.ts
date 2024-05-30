@@ -75,7 +75,7 @@ export async function runExperiment(
       );
       break;
     }
-    if (model.usedTokens() > tokenLimit) {
+    if (tokenLimit > 0 && model.usedTokens() > tokenLimit) {
       console.log(
         `Token limit reached, ${workList.length} worklist items ignored.`
       );
@@ -180,8 +180,8 @@ if (require.main === module) {
       const prompts = JSON.parse(
         fs.readFileSync(argv.responses, "utf8")
       );
-      if (prompts.usedTokens) {
-        tokenLimit = prompts.usedTokens;
+      if (prompts.tokensUsed) {
+        tokenLimit = prompts.tokensUsed;
       }
     }
 

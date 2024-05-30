@@ -259,6 +259,7 @@ export class TestResultCollector extends BaseTestResultCollector {
         ({ prompt, id, file, temperature, completions, usedTokens }) => usedTokens
       ).reduce(
         (acc, val) => acc + val,
+        0
       ),
     };
     fs.writeFileSync(

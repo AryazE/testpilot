@@ -34,7 +34,6 @@ export class CachedCompletionModel implements ICompletionModel {
     usedTokens: number
   ) {
     this.completionMap.set(this.key(prompt, temperature), { completions: new Set(completions), usedTokens });
-    this.totalTokens += usedTokens;
   }
 
   public async completions(
@@ -54,9 +53,11 @@ export class CachedCompletionModel implements ICompletionModel {
             return newCompletions;
         }
       }
+    } else {
+        this.totalTokens += usedTokens;
     }
     return {
-      completions,
+      completions: new Set([...completions].slice(0, this.numOfCompletions)),
       usedTokens,
     };
   }

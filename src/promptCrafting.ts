@@ -198,7 +198,7 @@ export class Prompt {
     if (
       this.provenance.length > 0 &&
       this.provenance[this.provenance.length - 1].refiner.startsWith(
-        "RetryWithSignature"
+        "APIReferenceIncluder"
       )
     ) {
       this.provenance[this.provenance.length - 1].refiner =
@@ -285,7 +285,8 @@ export class RetryPromptFailedTest extends Prompt {
   constructor(
     prev: Prompt,
     private body: string,
-    private readonly err: string
+    private readonly err: string,
+    private readonly optionalText: string = ""
   ) {
     super(prev.fun, prev.usageSnippets, prev.options);
   }
@@ -313,10 +314,20 @@ export class RetryPromptFailedTest extends Prompt {
     } else {
       errorMessage = `    // ${this.err}\n`;
     }
+    let extraText = "";
+    if (this.optionalText.includes("\n")) {
+      extraText =
+        this.optionalText
+          .split("\n")
+          .slice(0, MaxAdditionalSignatures)
+          .map(commentOut)
+          .join("\n") + "\n";
+    }
     return (
       failingTest +
       "    // the test above fails with the following error:\n" +
       errorMessage +
+      extraText +
       "    // fixed test:\n" +
       this.testHeader
     );
@@ -379,11 +390,11 @@ export class FunctionBodyIncluder implements IPromptRefiner {
 
 /**
  * A prompt refiner that, for a failed test, adds the relevant function
- * signatures to the prompt and tries again.
+ * signatures to the prompt.
  */
-export class RetryWithSignature implements IPromptRefiner {
+export class APIReferenceIncluder implements IPromptRefiner {
   public get name(): string {
-    return "RetryWithSignature";
+    return "APIReferenceIncluder";
   }
 
   public refine(
@@ -445,6 +456,71 @@ export class RetryWithSignature implements IPromptRefiner {
             .sort((a, b) => b[1] - a[1])
             .map(([sig, _]) => sig)
         ),
+      ];
+    }
+    return [];
+  }
+}
+
+/**
+ * A prompt refiner that, for a failed test caused by hallucinations, 
+ * adds the error message and relevant API reference to the prompt and tries again.
+ */
+export class RetryWithAPIReference implements IPromptRefiner {
+  public get name(): string {
+    return "RetryWithAPIReference";
+  }
+
+  public refine(
+    original: Prompt,
+    completion: string,
+    outcome: TestOutcome
+  ): Prompt[] {
+    return [];
+  }
+
+  public async refineAsync(
+    original: Prompt,
+    completion: string,
+    outcome: TestOutcome,
+    fullAPI: { accessPath: string; descriptor: ApiElementDescriptor, packageName: string }[],
+    apiEmbeddings: Array<{ data: Float32Array }>
+  ): Promise<Prompt[]> {
+    if (
+      original.options.ragTries < MaxRetrievalIterations &&
+      outcome.status === TestStatus.FAILED &&
+      (outcome.err.message.includes("is not a function") ||
+        outcome.err.message.includes("of undefined"))
+    ) {
+      const embedding = await CodeEmbedding.getInstance();
+      const functionCalls = new Set(completion.match(/([\w\.]+)\(/g));
+      const attributeAccesses = new Set(completion.match(/(\w+(?:\.\w+)+)(?!\()/g));
+      if (!functionCalls && !attributeAccesses) {
+        return [];
+      }
+      const allEmbeddings = await Promise.all(
+        [...functionCalls, ...attributeAccesses].map((f) =>
+          embedding(f, { pooling: "mean", normalize: true })
+        )
+      );
+      let topKSimilars: Map<string, number> = new Map();
+      for (const singleEmbedding of allEmbeddings) {
+        const similarities = apiEmbeddings.map((emb) =>
+          cosineSimilarity(emb.data, singleEmbedding.data)
+        );
+        const frozenSimilarities = similarities.slice();
+        similarities.sort().reverse();
+        for (const sim of similarities.slice(0, 15)) {
+          const apiElement = fullAPI[frozenSimilarities.indexOf(sim)];
+          let sig = apiElement.accessPath;
+          if (apiElement.descriptor.type === "function")
+            sig += apiElement.descriptor.signature;
+          if (!topKSimilars.has(sig)) topKSimilars.set(sig, sim);
+        }
+      }
+      const apiRef = Array.from(topKSimilars).sort((a, b) => b[1] - a[1]).map(([sig, _]) => sig).join("\n");
+      return [
+        new RetryPromptFailedTest(original, completion, outcome.err.message, "The following are available:\n" + apiRef),
       ];
     }
     return [];

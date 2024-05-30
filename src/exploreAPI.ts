@@ -386,7 +386,9 @@ export function exploreAPI(pkgPath: string): API {
   const revert = addHook((code, filename) =>
     findDocComments(code, docComments)
   );
-  const pkgExports = require(pkgPath);
+//   const pkgExports = require(pkgPath);
+  let pkgExports;
+  pkgExports = require(pkgPath);
   revert();
   const api = exploreExports(pkgName, pkgExports, docComments);
   performance.measure("api-exploration", "api-exploration-start");

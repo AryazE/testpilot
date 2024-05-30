@@ -8,7 +8,8 @@ import {
   DocCommentIncluder,
   FunctionBodyIncluder,
   defaultPromptOptions,
-  RetryWithSignature,
+  APIReferenceIncluder,
+  RetryWithAPIReference,
 } from "./promptCrafting";
 import { ITestInfo, TestOutcome, TestStatus } from "./report";
 import { SnippetMap } from "./snippetHelper";
@@ -40,7 +41,8 @@ export class TestGenerator {
     if (apiEmbeddings.length == 0) {
       this.dehallucinate = false;
     } else {
-      this.refiners.push(new RetryWithSignature());
+      this.refiners.push(new APIReferenceIncluder());
+    //   this.refiners.push(new RetryWithAPIReference());
     }
   }
 
@@ -142,7 +144,7 @@ export class TestGenerator {
     worklist: Prompt[]
   ) {
     for (const refiner of this.refiners) {
-      if (refiner instanceof RetryWithSignature) continue;
+      if (refiner instanceof APIReferenceIncluder || refiner instanceof RetryWithAPIReference) continue;
       for (const refinedPrompt of refiner.refine(
         prompt,
         completion,
@@ -169,7 +171,7 @@ export class TestGenerator {
     worklist: Prompt[]
   ) {
     for (const refiner of this.refiners) {
-      if (refiner instanceof RetryWithSignature) {
+      if (refiner instanceof APIReferenceIncluder || refiner instanceof RetryWithAPIReference) {
         const refinedPrompts = await refiner.refineAsync(
           prompt,
           completion,
