@@ -4,7 +4,7 @@ import { TestOutcome, TestStatus } from "./report";
 import { closeBrackets, commentOut, trimAndCombineDocComment } from "./syntax";
 import { CodeEmbedding, cosineSimilarity } from "./embedding";
 
-const MaxAdditionalSignatures = 10;
+const MaxAdditionalSignatures = 3;
 const MaxRetrievalIterations = 3;
 
 /**
@@ -419,8 +419,10 @@ export class APIReferenceIncluder implements IPromptRefiner {
         outcome.err.message.includes("of undefined"))
     ) {
       const embedding = await CodeEmbedding.getInstance();
-      const functionCalls = new Set(completion.match(/([\w\.]+)\(/g));
-      const attributeAccesses = new Set(completion.match(/(\w+(?:\.\w+)+)(?!\()/g));
+      // const functionCalls = new Set(completion.match(/([\w\.]+)\(/g));
+      // const attributeAccesses = new Set(completion.match(/(\w+(?:\.\w+)+)(?!\()/g));
+      const functionCalls = new Set(outcome.err.message.match(/([\w\.]+)\(/g));
+      const attributeAccesses = new Set(outcome.err.message.match(/(\w+(?:\.\w+)+)(?!\()/g));
       if (!functionCalls && !attributeAccesses) {
         return [];
       }

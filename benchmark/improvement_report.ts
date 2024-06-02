@@ -121,7 +121,7 @@ if (require.main === module) {
           ) {
             existingSummary!.successful++;
             existingInstance!.successInstances.push({
-              before: prompt.provenance.map((pr) => pr.originalPrompt),
+              before: [...new Set(prompt.provenance.map((pr) => pr.originalPrompt))],
               after: prompt.id,
             });
           }
@@ -133,7 +133,7 @@ if (require.main === module) {
           ) {
             existingSummary!.improvedError++;
             existingInstance!.improvedInstances.push({
-              before: prompt.provenance.map((pr) => pr.originalPrompt),
+              before: [...new Set(prompt.provenance.map((pr) => pr.originalPrompt))],
               after: prompt.id,
             });
           }
