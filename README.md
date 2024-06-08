@@ -1,4 +1,7 @@
-# TestPilot
+# TestPilot + De-Hallucinator
+
+This is a modified version of TestPilot.
+Below is the documentation for TestPilot, which also applies to this version.
 
 TestPilot is a tool for automatically generating unit tests for npm packages
 written in JavaScript/TypeScript using a large language model (LLM).
@@ -137,19 +140,3 @@ run the queries.
 
 This project is licensed under the terms of the MIT open source license. Please refer to [MIT](./LICENSE.txt) for the full terms.
 
-## Maintainers
-
-- Max Schaefer (@max-schaefer)
-- Frank Tip (@franktip)
-- Sarah Nadi (@snadi)
-
-## Support
-
-TestPilot is a research prototype and is not officially supported. However, if
-you have questions or feedback, please file an issue and we will do our best to
-respond.
-
-## Acknowledgement
-
-We thank Aryaz Eghbali (@aryaze) for his work on the initial version of
-TestPilot.
