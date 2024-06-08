@@ -48,11 +48,13 @@ export async function runExperiment(
   let apiEmbeddings = [];
   if (dehallucinate) {
     const embedding = await CodeEmbedding.getInstance();
+    const embeddingStart = performance.now();
     apiEmbeddings = await Promise.all(
       fullAPI.map((f) =>
         embedding((f.descriptor.type === "function")?(f.accessPath + f.descriptor.signature):f.accessPath, { pooling: "mean", normalize: true })
       )
     );
+    console.log(`Embedding took ${performance.now() - embeddingStart}ms`);
   }
   const deadline = performance.now() + timeLimit;
   const generator = new TestGenerator(
@@ -62,7 +64,9 @@ export async function runExperiment(
     validator,
     collector,
     fullAPI,
-    apiEmbeddings
+    apiEmbeddings,
+    deadline,
+    tokenLimit
   );
 
   // initialize the workList with all functions
@@ -85,7 +89,8 @@ export async function runExperiment(
     const { fun } = workList.shift()!;
     await generator.generateAndValidateTests(fun);
   }
-
+  const l = generator.refinerTimes.length;
+  console.log((generator.refinerTimes.reduce((a, b) => a + b, 0) / l) + "ms spent on average for retrieval");
   collector.recordCoverageInfo(validator.computeCoverageSummary());
 }
 

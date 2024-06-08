@@ -1,3 +1,4 @@
+import { performance } from "perf_hooks";
 import { ICompletionModel } from "./completionModel";
 import { APIFunction, ApiElementDescriptor } from "./exploreAPI";
 import {
@@ -10,6 +11,7 @@ import {
   defaultPromptOptions,
   APIReferenceIncluder,
   RetryWithAPIReference,
+  SimpleRAG,
 } from "./promptCrafting";
 import { ITestInfo, TestOutcome, TestStatus } from "./report";
 import { SnippetMap } from "./snippetHelper";
@@ -28,6 +30,8 @@ export class TestGenerator {
     new FunctionBodyIncluder(),
   ];
   private dehallucinate = true;
+  private totalTokensUsed = 0;
+  public refinerTimes: number[] = [];
 
   constructor(
     private temperatures: number[],
@@ -36,13 +40,15 @@ export class TestGenerator {
     private validator: TestValidator,
     private collector: ITestResultCollector,
     private fullAPI: { accessPath: string; descriptor: ApiElementDescriptor; packageName: string }[],
-    private apiEmbeddings: Array<{ data: Float32Array }>
+    private apiEmbeddings: Array<{ data: Float32Array }>,
+    private deadline: number,
+    private tokenLimit: number
   ) {
     if (apiEmbeddings.length == 0) {
       this.dehallucinate = false;
     } else {
       this.refiners.push(new APIReferenceIncluder());
-    //   this.refiners.push(new RetryWithAPIReference());
+    //   this.refiners.push(new SimpleRAG());
     }
   }
 
@@ -56,6 +62,12 @@ export class TestGenerator {
       const snippets = this.snippetMap(fun.functionName) ?? [];
       const worklist = [new Prompt(fun, snippets, defaultPromptOptions())];
       while (worklist.length > 0) {
+        if (performance.now() > this.deadline) {
+          break;
+        }
+        if (this.totalTokensUsed > this.tokenLimit) {
+          break;
+        }
         const prompt = worklist.pop()!;
 
         // check whether we've generated this prompt before; if so, record that
@@ -72,6 +84,10 @@ export class TestGenerator {
           prompt.assemble(),
           { temperature }
         );
+        this.totalTokensUsed += usedTokens;
+        if (this.totalTokensUsed > this.tokenLimit) {
+          break;
+        }
         for (const completion of completions) {
           const testInfo = this.validateCompletion(
             prompt,
@@ -144,7 +160,7 @@ export class TestGenerator {
     worklist: Prompt[]
   ) {
     for (const refiner of this.refiners) {
-      if (refiner instanceof APIReferenceIncluder || refiner instanceof RetryWithAPIReference) continue;
+      if (refiner instanceof APIReferenceIncluder || refiner instanceof SimpleRAG) continue;
       for (const refinedPrompt of refiner.refine(
         prompt,
         completion,
@@ -171,7 +187,8 @@ export class TestGenerator {
     worklist: Prompt[]
   ) {
     for (const refiner of this.refiners) {
-      if (refiner instanceof APIReferenceIncluder || refiner instanceof RetryWithAPIReference) {
+      if (refiner instanceof APIReferenceIncluder || refiner instanceof SimpleRAG) {
+        const refineStart = performance.now();
         const refinedPrompts = await refiner.refineAsync(
           prompt,
           completion,
@@ -179,6 +196,7 @@ export class TestGenerator {
           this.fullAPI,
           this.apiEmbeddings
         );
+        this.refinerTimes.push(performance.now() - refineStart);
         for (const refinedPrompt of refinedPrompts) {
           const provenance = {
             originalPrompt: prompt,

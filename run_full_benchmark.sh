@@ -1,0 +1,6 @@
+for pkg in commander js-sdsl joi node-red pm2 prettier ws handlebars winston howler bluebird; do
+    # ./node_modules/.bin/dotenvx run -- node benchmark/run.js --outputDir ~/testpilot/reports/$pkg --package ~/testpilot/node_modules/$pkg --timeLimit 3600 --tokenLimit 130000 --no-dehallucinate --temperatures "0.1" --numCompletions 4
+    ./node_modules/.bin/dotenvx run -- node benchmark/run.js --outputDir ~/testpilot/reports/$pkg-APIrefInc --package ~/testpilot/node_modules/$pkg --timeLimit 60 --dehallucinate --temperatures "0.1" --numCompletions 2 --tokenLimit 130000 --responses ~/testpilot/reports_n3/$pkg/prompts.json --no-strictResponses
+done
+# ./node_modules/.bin/dotenvx run -- node benchmark/run.js --outputDir ~/testpilot/reports/eleventy --package ~/testpilot/node_modules/@11ty/eleventy --timeLimit 3600 --tokenLimit 130000 --no-dehallucinate --temperatures "0.1" --numCompletions 4
+./node_modules/.bin/dotenvx run -- node benchmark/run.js --outputDir ~/testpilot/reports/eleventy-APIrefInc --package ~/testpilot/node_modules/@11ty/eleventy --timeLimit 60 --dehallucinate --temperatures "0.1" --numCompletions 2 --tokenLimit 130000 --responses ~/testpilot/reports_n3/eleventy/prompts.json --no-strictResponses

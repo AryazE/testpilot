@@ -32,6 +32,8 @@ type PromptOptions = {
   includeDocComment: boolean;
   /** Whether to include the function's body in the prompt. */
   includeFunctionBody: boolean;
+  /** Whether to include RAG */
+  includeRAG: boolean;
   /** The number of iterations with RAG. */
   ragTries: number;
 };
@@ -41,6 +43,7 @@ export function defaultPromptOptions(): PromptOptions {
     includeSnippets: false,
     includeDocComment: false,
     includeFunctionBody: false,
+    includeRAG: false,
     ragTries: 0,
   };
 }
@@ -84,7 +87,7 @@ export function defaultPromptOptions(): PromptOptions {
  */
 export class Prompt {
   private readonly imports: string;
-  private readonly signature: string;
+  public readonly signature: string;
   private readonly relevantSignatures: string;
   private readonly docComment: string;
   private readonly functionBody: string;
@@ -123,7 +126,7 @@ export class Prompt {
       this.docComment = "";
     }
 
-    if (options.ragTries > 0 && options.ragTries <= MaxRetrievalIterations && this.additionalSignatures.length > 0) {
+    if (options.includeRAG || (options.ragTries > 0 && options.ragTries <= MaxRetrievalIterations && this.additionalSignatures.length > 0)) {
       this.relevantSignatures = "// API Reference:\n" + this.additionalSignatures
         .map(commentOut)
         .slice(
@@ -194,18 +197,12 @@ export class Prompt {
   }
 
   public withProvenance(...provenanceInfos: PromptProvenance[]): Prompt {
-    this.provenance.push(...provenanceInfos);
-    if (
-      this.provenance.length > 0 &&
-      this.provenance[this.provenance.length - 1].refiner.startsWith(
-        "APIReferenceIncluder"
-      )
-    ) {
-      this.provenance[this.provenance.length - 1].refiner =
-        this.provenance[this.provenance.length - 1].refiner +
-        " " +
-        this.options.ragTries;
+    for (let i = 0; i < provenanceInfos.length; i++) {
+        if (provenanceInfos[i].refiner.startsWith("APIReferenceIncluder")) {
+            provenanceInfos[i].refiner = provenanceInfos[i].refiner + " " + this.options.ragTries;
+        }
     }
+    this.provenance.push(...provenanceInfos);
     return this;
   }
 
@@ -523,6 +520,60 @@ export class RetryWithAPIReference implements IPromptRefiner {
       const apiRef = Array.from(topKSimilars).sort((a, b) => b[1] - a[1]).map(([sig, _]) => sig).join("\n");
       return [
         new RetryPromptFailedTest(original, completion, outcome.err.message, "The following are available:\n" + apiRef),
+      ];
+    }
+    return [];
+  }
+}
+
+export class SimpleRAG implements IPromptRefiner {
+  public get name(): string {
+    return "SimpleRAG";
+  }
+
+  public refine(original: Prompt, body: string, outcome: TestOutcome): Prompt[] {
+    return [];
+  }
+
+  public async refineAsync(
+    original: Prompt,
+    completion: string,
+    outcome: TestOutcome,
+    fullAPI: { accessPath: string; descriptor: ApiElementDescriptor, packageName: string }[],
+    apiEmbeddings: Array<{ data: Float32Array }>
+  ): Promise<Prompt[]> {
+    if (!original.options.includeRAG &&
+      outcome.status === TestStatus.FAILED &&
+      (outcome.err.message.includes("is not a function") ||
+        outcome.err.message.includes("of undefined"))
+    ) {
+      const embedding = await CodeEmbedding.getInstance();
+      const singleEmbedding = await embedding(original.signature, { pooling: "mean", normalize: true });
+      let topKSimilars: Map<string, number> = new Map();
+      const similarities = apiEmbeddings.map((emb) =>
+        cosineSimilarity(emb.data, singleEmbedding.data)
+      );
+      const frozenSimilarities = similarities.slice();
+      similarities.sort().reverse();
+      for (const sim of similarities.slice(0, 15)) {
+        const apiElement = fullAPI[frozenSimilarities.indexOf(sim)];
+        let sig = apiElement.accessPath;
+        if (apiElement.descriptor.type === "function")
+          sig += apiElement.descriptor.signature;
+        if (!topKSimilars.has(sig)) topKSimilars.set(sig, sim);
+      }
+      return [
+        new Prompt(
+          original.fun,
+          original.usageSnippets,
+          {
+            ...original.options,
+            includeRAG: true,
+          },
+          Array.from(topKSimilars)
+            .sort((a, b) => b[1] - a[1])
+            .map(([sig, _]) => sig)
+        ),
       ];
     }
     return [];
